@@ -74,7 +74,7 @@ class fileparser(BaseModule):
             resp = requests.put(self.tika_url, f, headers={"Accept": "application/json"})
             if resp.status_code == 200:
                 return resp.json()
-    
+
     async def get_docker_ip(self):
         docker_ip = "172.17.0.1"
         try:
