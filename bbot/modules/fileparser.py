@@ -5,7 +5,7 @@ from bbot.modules.base import BaseModule
 class fileparser(BaseModule):
     watched_events = ["FILESYSTEM"]
     produced_events = ["RAW_DATA"]
-    flags = ["passive", "slow"]
+    flags = ["passive"]
     meta = {
         "description": "Module to extract data from files",
         "created_date": "2024-06-03",
