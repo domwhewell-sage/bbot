@@ -12,33 +12,33 @@ class fileparser(BaseModule):
         "author": "@domwhewell-sage",
     }
 
-    # deps_ansible = [
-    #     {
-    #         "name": "Check if Docker is already installed",
-    #         "command": "docker --version",
-    #         "register": "docker_installed",
-    #         "ignore_errors": True,
-    #     },
-    #     {
-    #         "name": "Install Docker (Non-Debian)",
-    #         "package": {"name": "docker", "state": "present"},
-    #         "become": True,
-    #         "when": "ansible_facts['os_family'] != 'Debian' and docker_installed.rc != 0",
-    #     },
-    #     {
-    #         "name": "Install Docker (Debian)",
-    #         "package": {
-    #             "name": "docker.io",
-    #             "state": "present",
-    #         },
-    #         "become": True,
-    #         "when": "ansible_facts['os_family'] == 'Debian' and docker_installed.rc != 0",
-    #     },
-    # ]
+    deps_ansible = [
+        {
+            "name": "Check if Docker is already installed",
+            "command": "docker --version",
+            "register": "docker_installed",
+            "ignore_errors": True,
+        },
+        {
+            "name": "Install Docker (Non-Debian)",
+            "package": {"name": "docker", "state": "present"},
+            "become": True,
+            "when": "ansible_facts['os_family'] != 'Debian' and docker_installed.rc != 0",
+        },
+        {
+            "name": "Install Docker (Debian)",
+            "package": {
+                "name": "docker.io",
+                "state": "present",
+            },
+            "become": True,
+            "when": "ansible_facts['os_family'] == 'Debian' and docker_installed.rc != 0",
+        },
+    ]
 
     async def setup(self):
         self.tika_url = "http://172.29.64.1:9998/tika"
-        # await self.run_process("systemctl", "start", "docker", sudo=True)
+        await self.run_process("systemctl", "start", "docker", sudo=True)
         await self.run_process(
             "docker", "run", "-d", "-p", "9998:9998", "--name", "apache_tika", "--rm", "apache/tika:latest", sudo=True
         )
@@ -72,7 +72,6 @@ class fileparser(BaseModule):
             resp = requests.put(self.tika_url, f, headers={"Accept": "application/json"})
             if resp.status_code == 200:
                 return resp.json()
-                # return resp.text.strip().encode("ascii", "ignore").decode()
 
     async def finish(self):
         await self.run_process("docker", "stop", "apache_tika", sudo=True)
