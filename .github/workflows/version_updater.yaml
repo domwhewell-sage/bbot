@@ -2,7 +2,7 @@ name: Version Updater
 on:
   schedule:
     - cron: '0 0 * * *'
-  manual-trigger:
+  workflow_dispatch:
 
 jobs:
   update-nuclei-version:
