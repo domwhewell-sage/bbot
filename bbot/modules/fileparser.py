@@ -1,3 +1,4 @@
+import json
 import requests
 from bbot.modules.base import BaseModule
 
@@ -37,11 +38,12 @@ class fileparser(BaseModule):
     ]
 
     async def setup(self):
-        self.tika_url = "http://172.29.64.1:9998/tika"
         await self.run_process("systemctl", "start", "docker", sudo=True)
         await self.run_process(
             "docker", "run", "-d", "-p", "9998:9998", "--name", "apache_tika", "--rm", "apache/tika:latest", sudo=True
         )
+        docker_ip = await self.get_docker_ip()
+        self.tika_url = f"http://{docker_ip}:9998/tika"
         return True
 
     async def filter_event(self, event):
@@ -72,6 +74,16 @@ class fileparser(BaseModule):
             resp = requests.put(self.tika_url, f, headers={"Accept": "application/json"})
             if resp.status_code == 200:
                 return resp.json()
+    
+    async def get_docker_ip(self):
+        docker_ip = "172.17.0.1"
+        try:
+            ip_output = await self.run_process(["ip", "-j", "-4", "a", "show", "dev", "docker0"])
+            interface_json = json.loads(ip_output.stdout)
+            docker_ip = interface_json[0]["addr_info"][0]["local"]
+        except Exception:
+            pass
+        return docker_ip
 
     async def finish(self):
         await self.run_process("docker", "stop", "apache_tika", sudo=True)
