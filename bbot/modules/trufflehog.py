@@ -3,7 +3,7 @@ from bbot.modules.base import BaseModule
 
 
 class trufflehog(BaseModule):
-    watched_events = ["FILESYSTEM"]
+    watched_events = ["CODE_REPOSITORY", "FILESYSTEM"]
     produced_events = ["FINDING", "VULNERABILITY"]
     flags = ["passive", "safe", "code-enum"]
     meta = {
@@ -13,7 +13,7 @@ class trufflehog(BaseModule):
     }
 
     options = {
-        "version": "3.75.1",
+        "version": "3.81.7",
         "only_verified": True,
         "concurrency": 8,
     }
@@ -40,16 +40,29 @@ class trufflehog(BaseModule):
         self.verified = self.config.get("only_verified", True)
         self.concurrency = int(self.config.get("concurrency", 8))
         return True
+    
+    async def filter_event(self, event):
+        if event.type == "CODE_REPOSITORY":
+            if "postman" not in event.tags:
+                return False, "Module only accepts postman CODE_REPOSITORY events"
+        return True
 
     async def handle_event(self, event):
-        path = event.data["path"]
         description = event.data.get("description", "")
-        if "git" in event.tags:
-            module = "git"
-        elif "docker" in event.tags:
-            module = "docker"
+        if event.type == "CODE_REPOSITORY":
+            path = event.data["url"]
+            if "postman" in event.tags:
+                # Get just the workspace ID
+                path = path.split("/")[-1]
+                module = "postman"
         else:
-            module = "filesystem"
+            path = event.data["path"]
+            if "git" in event.tags:
+                module = "git"
+            elif "docker" in event.tags:
+                module = "docker"
+            else:
+                module = "filesystem"
         async for decoder_name, detector_name, raw_result, verified, source_metadata in self.execute_trufflehog(
             module, path
         ):
@@ -96,6 +109,9 @@ class trufflehog(BaseModule):
         elif module == "docker":
             command.append("docker")
             command.append("--image=file://" + path)
+        elif module == "postman":
+            command.append("postman")
+            command.append("--workspace-id=" + path)
         elif module == "filesystem":
             command.append("filesystem")
             command.append(path)

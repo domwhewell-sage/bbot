@@ -3,7 +3,7 @@ from bbot.modules.templates.subdomain_enum import subdomain_enum
 
 class postman(subdomain_enum):
     watched_events = ["DNS_NAME"]
-    produced_events = ["URL_UNVERIFIED"]
+    produced_events = ["URL_UNVERIFIED", "CODE_REPOSITORY"]
     flags = ["passive", "subdomain-enum", "safe", "code-enum"]
     meta = {
         "description": "Query Postman's API for related workspaces, collections, requests",
@@ -26,7 +26,9 @@ class postman(subdomain_enum):
     async def handle_event(self, event):
         query = self.make_query(event)
         self.verbose(f"Searching for any postman workspaces, collections, requests belonging to {query}")
-        for url, context in await self.query(query):
+        for type, url, context in await self.query(query):
+            if type == "workspace":
+                await self.emit_event({"url": url}, "CODE_REPOSITORY", parent=event, tags="postman", context=context)
             await self.emit_event(url, "URL_UNVERIFIED", parent=event, tags="httpx-safe", context=context)
 
     async def query(self, query):
@@ -78,6 +80,7 @@ class postman(subdomain_enum):
                 workspace_url = f"{self.base_url}/workspace/{id}"
                 interesting_urls.append(
                     (
+                        "workspace",
                         workspace_url,
                         f'{{module}} searched postman.com for "{query}" and found matching workspace "{name}" at {{event.type}}: {workspace_url}',
                     )
@@ -86,6 +89,7 @@ class postman(subdomain_enum):
                 globals_url = f"{self.base_url}/workspace/{id}/globals"
                 interesting_urls.append(
                     (
+                        "url",
                         globals_url,
                         f'{{module}} searched postman.com for "{query}", found matching workspace "{name}" at {workspace_url}, and found globals at {{event.type}}: {globals_url}',
                     )
@@ -94,6 +98,7 @@ class postman(subdomain_enum):
                     env_url = f"{self.base_url}/environment/{e_id}"
                     interesting_urls.append(
                         (
+                            "url",
                             env_url,
                             f'{{module}} searched postman.com for "{query}", found matching workspace "{name}" at {workspace_url}, enumerated environments, and found {{event.type}}: {env_url}',
                         )
@@ -102,6 +107,7 @@ class postman(subdomain_enum):
                     collection_url = f"{self.base_url}/collection/{c_id}"
                     interesting_urls.append(
                         (
+                            "url",
                             collection_url,
                             f'{{module}} searched postman.com for "{query}", found matching workspace "{name}" at {workspace_url}, enumerated collections, and found {{event.type}}: {collection_url}',
                         )
@@ -111,6 +117,7 @@ class postman(subdomain_enum):
                     request_url = f"{self.base_url}/request/{r_id}"
                     interesting_urls.append(
                         (
+                            "url",
                             request_url,
                             f'{{module}} searched postman.com for "{query}", found matching workspace "{name}" at {workspace_url}, enumerated requests, and found {{event.type}}: {request_url}',
                         )

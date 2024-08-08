@@ -244,6 +244,8 @@ class TestPostman(ModuleTestBase):
         module_test.set_expect_requests(request_args, respond_args)
 
     def check(self, module_test, events):
+        code_repos = [e for e in events if e.type == "CODE_REPOSITORY"]
+        assert len(code_repos) == 1, "Failed to emit CODE_REPOSITORY event"
         assert any(
             e.data == "http://127.0.0.1:8888/_api/workspace/afa061be-9cb0-4520-9d4d-fe63361daf0f" for e in events
         ), "Failed to detect workspace"
