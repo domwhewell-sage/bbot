@@ -33,12 +33,24 @@ class TestGit(ModuleTestBase):
             e.type == "FINDING" and "http://127.0.0.1:8888/.git/config" in e.data["description"] for e in events
         )
         assert any(
+            e.type == "CODE_REPOSITORY" and e.data["url"] == "http://127.0.0.1:8888/.git/" for e in events
+        )
+        assert any(
             e.type == "FINDING" and "http://127.0.0.1:8888/test/.git/config" in e.data["description"] for e in events
+        )
+        assert any(
+            e.type == "CODE_REPOSITORY" and e.data["url"] == "http://127.0.0.1:8888/test/.git/" for e in events
         )
         assert any(
             e.type == "FINDING" and "http://127.0.0.1:8888/test/asdf/.git/config" in e.data["description"]
             for e in events
         )
+        assert any(
+            e.type == "CODE_REPOSITORY" and e.data["url"] == "http://127.0.0.1:8888/test/asdf/.git/" for e in events
+        )
         assert not any(
             e.type == "FINDING" and "http://127.0.0.1:8888/test2/.git/config" in e.data["description"] for e in events
+        )
+        assert not any(
+            e.type == "CODE_REPOSITORY" and e.data["url"] == "http://127.0.0.1:8888/test2/.git/" for e in events
         )
