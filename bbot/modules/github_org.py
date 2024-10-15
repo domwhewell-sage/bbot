@@ -198,22 +198,7 @@ class github_org(github):
             return is_org, in_scope
         if status_code == 200:
             is_org = True
-        try:
-            json = r.json()
-        except Exception as e:
-            self.warning(f"Failed to decode JSON for {r.url} (HTTP status: {status_code}): {e}")
-            return is_org, in_scope
-        for k, v in json.items():
-            if (
-                isinstance(v, str)
-                and (
-                    self.helpers.is_dns_name(v, include_local=False)
-                    or self.helpers.is_url(v)
-                    or self.helpers.is_email(v)
-                )
-                and self.scan.in_scope(v)
-            ):
-                self.verbose(f'Found in-scope key "{k}": "{v}" for {org}, it appears to be in-scope')
+            in_scope_hosts = await self.scan.extract_in_scope_hostnames(r.text)
+            if in_scope_hosts:
                 in_scope = True
-                break
         return is_org, in_scope
