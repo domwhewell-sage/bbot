@@ -1,6 +1,5 @@
-from GitHacker import GitHacker, remove_suffixes, md5
-
 from pathlib import Path
+from subprocess import CalledProcessError
 from bbot.modules.base import BaseModule
 
 
@@ -9,26 +8,22 @@ class githacker(BaseModule):
     produced_events = ["FILESYSTEM"]
     flags = ["passive", "safe", "slow", "code-enum"]
     meta = {
-        "description": "Download a leaked .git folder recursively or by bruteforcing common names",
+        "description": "Download a leaked .git folder recursively or by fuzzing common names",
         "created_date": "",
         "author": "@domwhewell-sage",
     }
     options = {
         "output_folder": "",
         "brute": False,
-        "enable_manually_check_dangerous_git_files": False,
-        "threads": 4,
-        "delay": 0,
+        "max_semanic_version": 10,
     }
     options_desc = {
         "output_folder": "Folder to download repositories to",
         "brute": "Brute force branch/tag names",
-        "enable_manually_check_dangerous_git_files": "Disable manually checking for dangerous git files",
-        "threads": "Number of threads to use",
-        "delay": "Number of seconds between HTTP requests",
+        "max_semanic_version": "Max number to brute force to",
     }
 
-    deps_pip = ["GitHacker~=1.1.7"]
+    deps_apt = ["git"]
 
     scope_distance_modifier = 2
 
@@ -39,25 +34,173 @@ class githacker(BaseModule):
         else:
             self.output_dir = self.scan.home / "git_repos"
         self.helpers.mkdir(self.output_dir)
+        self.tempdir = self.helpers.temp_dir / "git_directories"
+        self.helpers.mkdir(self.tempdir)
         self.brute = self.config.get("brute", False)
-        self.disable_manually_check = self.config.get("enable_manually_check_dangerous_git_files", False)
-        self.threads = self.config.get("threads", 4)
-        self.delay = self.config.get("delay", 0)
+        self.git_files = [
+            "/.git/config",
+            "/.git/hooks/",
+            "/.git/hooks/applypatch-msg",
+            "/.git/hooks/commit-msg",
+            "/.git/hooks/fsmonitor-watchman",
+            "/.git/hooks/post-update",
+            "/.git/hooks/pre-applypatch",
+            "/.git/hooks/pre-commit",
+            "/.git/hooks/pre-merge-commit",
+            "/.git/hooks/pre-push",
+            "/.git/hooks/pre-rebase",
+            "/.git/hooks/pre-receive",
+            "/.git/hooks/prepare-commit-msg",
+            "/.git/hooks/update",
+            "/.git/COMMIT_EDITMSG",
+            "/.git/description",
+            "/.git/FETCH_HEAD",
+            "/.git/HEAD",
+            "/.git/index",
+            "/.git/info/",
+            "/.git/info/exclude",
+            "/.git/logs",
+            "/.git/logs/HEAD",
+            "/.git/logs/refs/",
+            "/.git/logs/refs/remotes/",
+            "/.git/logs/refs/remotes/origin/",
+            "/.git/logs/refs/remotes/origin/HEAD",
+            "/.git/logs/refs/stash",
+            "/.git/ORIG_HEAD",
+            "/.git/packed-refs",
+            "/.git/refs/",
+            "/.git/refs/remotes/",
+            "/.git/refs/remotes/origin/",
+            "/.git/refs/remotes/origin/HEAD",
+            "/.git/refs/stash",
+            "/.git/objects/",
+            "/.git/objects/info/",
+            "/.git/objects/info/alternates",
+            "/.git/objects/info/http-alternates",
+            "/.git/objects/info/packs",
+        ]
+        if self.brute:
+            for major in range(self.max_semanic_version):
+                for minor in range(self.max_semanic_version):
+                    for patch in range(self.max_semanic_version):
+                        self.git_files.append(f"/.git/refs/tags/v{major}.{minor}.{patch}")
+                        self.git_files.append(f"/.git/refs/tags/{major}.{minor}.{patch}")
+        else:
+            self.git_files.extend(
+                [
+                    "/.git/refs/tags/v0.0.1",
+                    "/.git/refs/tags/0.0.1",
+                    "/.git/refs/tags/v1.0.0",
+                    "/.git/refs/tags/1.0.0",
+                ]
+            )
         return await super().setup()
 
     async def filter_event(self, event):
         if event.type == "CODE_REPOSITORY":
             if "git-directory" not in event.tags:
                 return False, "event is not a leaked .git directory"
+            else:
+                url = self.helpers.urljoin(event.data.get("url"), "HEAD")
+                response = await self.helpers.request(url, method="HEAD")
+                if response.status_code != 200:
+                    return False, f"The target url({url}) is not a git repository"
         return True
 
     async def handle_event(self, event):
         repo_url = event.data.get("url")
-        # repo_path = await self.scan.helpers.run_in_executor(self.githacker, repo_url)
-        # if repo_path:
-        #     self.verbose(f"Downloaded {repo_url} to {repo_path}")
-        #     codebase_event = self.make_event({"path": str(repo_path)}, "FILESYSTEM", tags=["git"], parent=event)
-        #     await self.emit_event(
-        #         codebase_event,
-        #         context=f"{{module}} downloaded git repo at {repo_url} to {{event.type}}: {repo_path}",
-        #     )
+        repo_folder = self.helpers.tagify(repo_url)
+        dir_listing = await self.directory_listing_enabled(repo_url)
+        if dir_listing:
+            urls = await self.recursive_dir_list(dir_listing)
+        else:
+            urls = await self.git_fuzz(repo_url)
+        tmp_dir = await self.download_files(urls, repo_folder)
+        if tmp_dir:
+            repo_path = await self.clone_git_repository(tmp_dir, repo_folder)
+            if repo_path:
+                codebase_event = self.make_event({"path": str(repo_path)}, "FILESYSTEM", tags=["git"], parent=event)
+                await self.emit_event(
+                    codebase_event,
+                    context=f"{{module}} cloned git repo at {repo_url} to {{event.type}}: {str(repo_path)}",
+                )
+
+    async def directory_listing_enabled(self, repo_url):
+        response = await self.helpers.request(repo_url)
+        if "<title>Index of" in response.text:
+            self.info(f"Directory listing enabled at {repo_url}")
+            return response
+        return None
+
+    async def recursive_dir_list(self, dir_listing):
+        file_list = []
+        soup = self.helpers.beautifulsoup(dir_listing.text, "html.parser")
+        links = soup.find_all("a")
+        for link in links:
+            href = link["href"]
+            if href == "../" or href == "/":
+                continue
+            if href.endswith("/"):
+                folder_url = self.helpers.urljoin(str(dir_listing.url), href)
+                url = self.helpers.urlparse(folder_url)
+                file_list.append(url)
+                response = await self.helpers.request(folder_url)
+                if response.status_code == 200:
+                    file_list.extend(await self.recursive_dir_list(response))
+            else:
+                file_url = self.helpers.urljoin(str(dir_listing.url), href)
+                # Ensure the file is in the same domain as the directory listing
+                if file_url.startswith(str(dir_listing.url)):
+                    url = self.helpers.urlparse(file_url)
+                    file_list.append(url)
+        return file_list
+
+    async def git_fuzz(self, repo_url):
+        file_list = []
+        # git_minimal_files = ["/.git/HEAD", "/.git/objects/", "/.git/refs/", "/.git/refs/heads/"]
+        self.info(f"Directory listing not enabled, fuzzing {repo_url} for git files")
+        for file in self.git_files:
+            file_url = self.helpers.urljoin(repo_url, file)
+            url = self.helpers.urlparse(file_url)
+            if file.endswith("/"):
+                file_list.append(url)
+            response = await self.helpers.request(file_url)
+            if response.status_code == 200:
+                file_list.append(url)
+        return file_list
+
+    async def download_files(self, urls, folder):
+        containing_folder = self.tempdir / folder
+        self.helpers.mkdir(containing_folder)
+        self.verbose(f"Downloading the files to the temp directory {containing_folder}")
+        for url in urls:
+            if url.path.endswith("/"):
+                self.helpers.mkdir(containing_folder / url.path[1:])
+            else:
+                await self.helpers.download(url.geturl(), filename=str(containing_folder / url.path[1:]))
+        if containing_folder.iterdir():
+            self.debug(list(self.helpers.list_files(containing_folder / ".git")))
+            return containing_folder
+        else:
+            self.verbose(f"No files downloaded, removing temp directory {containing_folder}")
+            self.helpers.rm_rf(containing_folder)
+            return None
+
+    async def clone_git_repository(self, tmp_dir, dst_dir):
+        folder = self.output_dir / dst_dir
+        self.helpers.mkdir(folder)
+        self.verbose(f"Using git clone to reconstruct the repository at {folder}")
+        command = ["git", "-C", folder, "clone", f"file://{tmp_dir}"]
+        try:
+            output = await self.run_process(command, env={"GIT_TERMINAL_PROMPT": "0"}, check=True)
+        except CalledProcessError as e:
+            self.debug(f"Error cloning {tmp_dir}. STDERR: {repr(e.stderr)}")
+            return
+
+        folder_name = output.stderr.split("Cloning into '")[1].split("'")[0]
+        self.helpers.rm_rf(tmp_dir)
+        return folder / folder_name
+
+    async def cleanup(self):
+        self.helpers.rm_rf(self.tempdir)
+        pass

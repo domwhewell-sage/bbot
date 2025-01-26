@@ -1,8 +1,10 @@
 from .base import ModuleTestBase
 
 
-class TestGitHacker(ModuleTestBase):
-    targets = ["http://127.0.0.1:8888/"]
+class TestGitHacker_Dirlisting(ModuleTestBase):
+    targets = [
+        "http://127.0.0.1:8888/test",
+    ]
 
     modules_overrides = ["git", "githacker", "httpx"]
 
@@ -36,6 +38,7 @@ class TestGitHacker(ModuleTestBase):
                 <tr><th>Name</th><th>Size</th></tr>
                 <tr><td><a href='../'>[..]</a></td><td></td></tr>
                 <tr><td><a href='/.git/info/exclude'>exclude</a></td><td>240B</td></tr>
+                <tr><td><a href='http://exclude.com/excludeme'>excludeme</a></td><td>0B</td></tr>
             </table>
         </body>
     </html>"""
@@ -102,55 +105,93 @@ class TestGitHacker(ModuleTestBase):
     # *~"""
 
     async def setup_after_prep(self, module_test):
-        module_test.set_expect_requests(expect_args={"uri": "/.git/"}, respond_args={"response_data": self.index_html})
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/config"}, respond_args={"response_data": self.git_config}
+            expect_args={"uri": "/test/.git/"}, respond_args={"response_data": self.index_html}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/branches/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/config"}, respond_args={"response_data": self.git_config}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/description"}, respond_args={"response_data": self.git_description}
+            expect_args={"uri": "/test/.git/branches/"}, respond_args={"response_data": self.empty_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/HEAD"}, respond_args={"response_data": self.git_head}
+            expect_args={"uri": "/test/.git/description"}, respond_args={"response_data": self.git_description}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/hooks/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/HEAD"}, respond_args={"response_data": self.git_head}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/info/"}, respond_args={"response_data": self.info_index}
+            expect_args={"uri": "/test/.git/hooks/"}, respond_args={"response_data": self.empty_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/info/exclude"}, respond_args={"response_data": self.git_exclude}
+            expect_args={"uri": "/test/.git/info/"}, respond_args={"response_data": self.info_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/objects/"}, respond_args={"response_data": self.objects_index}
+            expect_args={"uri": "/test/.git/info/exclude"}, respond_args={"response_data": self.git_exclude}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/objects/info/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/objects/"}, respond_args={"response_data": self.objects_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/objects/pack/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/objects/info/"}, respond_args={"response_data": self.empty_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/refs/"}, respond_args={"response_data": self.refs_index}
+            expect_args={"uri": "/test/.git/objects/pack/"}, respond_args={"response_data": self.empty_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/refs/heads/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/refs/"}, respond_args={"response_data": self.refs_index}
         )
         module_test.set_expect_requests(
-            expect_args={"uri": "/.git/refs/tags/"}, respond_args={"response_data": self.empty_index}
+            expect_args={"uri": "/test/.git/refs/heads/"}, respond_args={"response_data": self.empty_index}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/refs/tags/"}, respond_args={"response_data": self.empty_index}
         )
 
     def check(self, module_test, events):
         assert any(
             e.type == "CODE_REPOSITORY"
-            and "git_directory" in e.tags
-            and e.data["url"] == "http://127.0.0.1:8888/.git/"
+            and "git-directory" in e.tags
+            and e.data["url"] == "http://127.0.0.1:8888/test/.git/"
             for e in events
         )
         assert any(
-            e.type == "FILESYSTEM" and "git_directory" in e.tags and e.data["url"] == "http://127.0.0.1:8888/.git/"
+            e.type == "FILESYSTEM" and "git" in e.tags and e.data["path"] == "http-127-0-0-1-8888-test-git/.git"
             for e in events
+        )
+
+
+class TestGitHacker_NoDirlisting(TestGitHacker_Dirlisting):
+    async def setup_after_prep(self, module_test):
+        module_test.set_expect_requests(expect_args={"uri": "/test/.git/"}, respond_args={"response_data": ""})
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/config"}, respond_args={"response_data": self.git_config}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/branches/"}, respond_args={"response_data": ""}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/description"}, respond_args={"response_data": self.git_description}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/HEAD"}, respond_args={"response_data": self.git_head}
+        )
+        module_test.set_expect_requests(expect_args={"uri": "/test/.git/hooks/"}, respond_args={"response_data": ""})
+        module_test.set_expect_requests(expect_args={"uri": "/test/.git/info/"}, respond_args={"response_data": ""})
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/info/exclude"}, respond_args={"response_data": self.git_exclude}
+        )
+        module_test.set_expect_requests(expect_args={"uri": "/test/.git/objects/"}, respond_args={"response_data": ""})
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/objects/info/"}, respond_args={"response_data": ""}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/objects/pack/"}, respond_args={"response_data": ""}
+        )
+        module_test.set_expect_requests(expect_args={"uri": "/test/.git/refs/"}, respond_args={"response_data": ""})
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/refs/heads/"}, respond_args={"response_data": ""}
+        )
+        module_test.set_expect_requests(
+            expect_args={"uri": "/test/.git/refs/tags/"}, respond_args={"response_data": ""}
         )
