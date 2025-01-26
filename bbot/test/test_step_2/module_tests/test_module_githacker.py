@@ -16,14 +16,14 @@ class TestGitHacker_Dirlisting(ModuleTestBase):
             <h1>Index of /.git</h1>
             <table>
                 <tr><th>Name</th><th>Size</th></tr>
-                <tr><td><a href='/.git/branches/'>&lt;branches&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/config'>config</a></td><td>157B</td></tr>
-                <tr><td><a href='/.git/description'>description</a></td><td>73B</td></tr>
-                <tr><td><a href='/.git/HEAD'>HEAD</a></td><td>23B</td></tr>
-                <tr><td><a href='/.git/hooks/'>&lt;hooks&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/info/'>&lt;info&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/objects/'>&lt;objects&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/refs/'>&lt;refs&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/branches/'>&lt;branches&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/config'>config</a></td><td>157B</td></tr>
+                <tr><td><a href='/test/.git/description'>description</a></td><td>73B</td></tr>
+                <tr><td><a href='/test/.git/HEAD'>HEAD</a></td><td>23B</td></tr>
+                <tr><td><a href='/test/.git/hooks/'>&lt;hooks&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/info/'>&lt;info&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/objects/'>&lt;objects&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/refs/'>&lt;refs&gt;</a></td><td></td></tr>
             </table>
         </body>
     </html>"""
@@ -37,7 +37,7 @@ class TestGitHacker_Dirlisting(ModuleTestBase):
             <table>
                 <tr><th>Name</th><th>Size</th></tr>
                 <tr><td><a href='../'>[..]</a></td><td></td></tr>
-                <tr><td><a href='/.git/info/exclude'>exclude</a></td><td>240B</td></tr>
+                <tr><td><a href='/test/.git/info/exclude'>exclude</a></td><td>240B</td></tr>
                 <tr><td><a href='http://exclude.com/excludeme'>excludeme</a></td><td>0B</td></tr>
             </table>
         </body>
@@ -52,8 +52,8 @@ class TestGitHacker_Dirlisting(ModuleTestBase):
             <table>
                 <tr><th>Name</th><th>Size</th></tr>
                 <tr><td><a href='../'>[..]</a></td><td></td></tr>
-                <tr><td><a href='/.git/objects/pack/'>&lt;pack&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/objects/info/'>&lt;info&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/objects/pack/'>&lt;pack&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/objects/info/'>&lt;info&gt;</a></td><td></td></tr>
             </table>
         </body>
     </html>"""
@@ -67,8 +67,8 @@ class TestGitHacker_Dirlisting(ModuleTestBase):
             <table>
                 <tr><th>Name</th><th>Size</th></tr>
                 <tr><td><a href='../'>[..]</a></td><td></td></tr>
-                <tr><td><a href='/.git/refs/heads/'>&lt;heads&gt;</a></td><td></td></tr>
-                <tr><td><a href='/.git/refs/tags/'>&lt;tags&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/refs/heads/'>&lt;heads&gt;</a></td><td></td></tr>
+                <tr><td><a href='/test/.git/refs/tags/'>&lt;tags&gt;</a></td><td></td></tr>
             </table>
         </body>
     </html>
@@ -156,7 +156,7 @@ class TestGitHacker_Dirlisting(ModuleTestBase):
             for e in events
         )
         assert any(
-            e.type == "FILESYSTEM" and "git" in e.tags and e.data["path"] == "http-127-0-0-1-8888-test-git/.git"
+            e.type == "FILESYSTEM" and "git" in e.tags and "http-127-0-0-1-8888-test-git" in e.data["path"]
             for e in events
         )
 

@@ -38,60 +38,61 @@ class githacker(BaseModule):
         self.helpers.mkdir(self.tempdir)
         self.brute = self.config.get("brute", False)
         self.git_files = [
-            "/.git/config",
-            "/.git/hooks/",
-            "/.git/hooks/applypatch-msg",
-            "/.git/hooks/commit-msg",
-            "/.git/hooks/fsmonitor-watchman",
-            "/.git/hooks/post-update",
-            "/.git/hooks/pre-applypatch",
-            "/.git/hooks/pre-commit",
-            "/.git/hooks/pre-merge-commit",
-            "/.git/hooks/pre-push",
-            "/.git/hooks/pre-rebase",
-            "/.git/hooks/pre-receive",
-            "/.git/hooks/prepare-commit-msg",
-            "/.git/hooks/update",
-            "/.git/COMMIT_EDITMSG",
-            "/.git/description",
-            "/.git/FETCH_HEAD",
-            "/.git/HEAD",
-            "/.git/index",
-            "/.git/info/",
-            "/.git/info/exclude",
-            "/.git/logs",
-            "/.git/logs/HEAD",
-            "/.git/logs/refs/",
-            "/.git/logs/refs/remotes/",
-            "/.git/logs/refs/remotes/origin/",
-            "/.git/logs/refs/remotes/origin/HEAD",
-            "/.git/logs/refs/stash",
-            "/.git/ORIG_HEAD",
-            "/.git/packed-refs",
-            "/.git/refs/",
-            "/.git/refs/remotes/",
-            "/.git/refs/remotes/origin/",
-            "/.git/refs/remotes/origin/HEAD",
-            "/.git/refs/stash",
-            "/.git/objects/",
-            "/.git/objects/info/",
-            "/.git/objects/info/alternates",
-            "/.git/objects/info/http-alternates",
-            "/.git/objects/info/packs",
+            ".git/",
+            "config",
+            "hooks/",
+            "hooks/applypatch-msg",
+            "hooks/commit-msg",
+            "hooks/fsmonitor-watchman",
+            "hooks/post-update",
+            "hooks/pre-applypatch",
+            "hooks/pre-commit",
+            "hooks/pre-merge-commit",
+            "hooks/pre-push",
+            "hooks/pre-rebase",
+            "hooks/pre-receive",
+            "hooks/prepare-commit-msg",
+            "hooks/update",
+            "COMMIT_EDITMSG",
+            "description",
+            "FETCH_HEAD",
+            "HEAD",
+            "index",
+            "info/",
+            "info/exclude",
+            "logs",
+            "logs/HEAD",
+            "logs/refs/",
+            "logs/refs/remotes/",
+            "logs/refs/remotes/origin/",
+            "logs/refs/remotes/origin/HEAD",
+            "logs/refs/stash",
+            "ORIG_HEAD",
+            "packed-refs",
+            "refs/",
+            "refs/remotes/",
+            "refs/remotes/origin/",
+            "refs/remotes/origin/HEAD",
+            "refs/stash",
+            "objects/",
+            "objects/info/",
+            "objects/info/alternates",
+            "objects/info/http-alternates",
+            "objects/info/packs",
         ]
         if self.brute:
             for major in range(self.max_semanic_version):
                 for minor in range(self.max_semanic_version):
                     for patch in range(self.max_semanic_version):
-                        self.git_files.append(f"/.git/refs/tags/v{major}.{minor}.{patch}")
-                        self.git_files.append(f"/.git/refs/tags/{major}.{minor}.{patch}")
+                        self.git_files.append(f"refs/tags/v{major}.{minor}.{patch}")
+                        self.git_files.append(f"refs/tags/{major}.{minor}.{patch}")
         else:
             self.git_files.extend(
                 [
-                    "/.git/refs/tags/v0.0.1",
-                    "/.git/refs/tags/0.0.1",
-                    "/.git/refs/tags/v1.0.0",
-                    "/.git/refs/tags/1.0.0",
+                    "refs/tags/v0.0.1",
+                    "refs/tags/0.0.1",
+                    "refs/tags/v1.0.0",
+                    "refs/tags/1.0.0",
                 ]
             )
         return await super().setup()
@@ -109,13 +110,14 @@ class githacker(BaseModule):
 
     async def handle_event(self, event):
         repo_url = event.data.get("url")
+        self.verbose(f"Processing leaked .git directory at {repo_url}")
         repo_folder = self.helpers.tagify(repo_url)
         dir_listing = await self.directory_listing_enabled(repo_url)
         if dir_listing:
-            urls = await self.recursive_dir_list(dir_listing)
+            tmp_dir = await self.recursive_dir_list(dir_listing)
         else:
-            urls = await self.git_fuzz(repo_url)
-        tmp_dir = await self.download_files(urls, repo_folder)
+            tmp_dir = await self.git_fuzz(repo_url, repo_folder)
+        # tmp_dir = await self.download_files(urls, repo_folder)
         if tmp_dir:
             repo_path = await self.clone_git_repository(tmp_dir, repo_folder)
             if repo_path:
@@ -140,46 +142,53 @@ class githacker(BaseModule):
             href = link["href"]
             if href == "../" or href == "/":
                 continue
-            if href.endswith("/"):
-                folder_url = self.helpers.urljoin(str(dir_listing.url), href)
-                url = self.helpers.urlparse(folder_url)
-                file_list.append(url)
-                response = await self.helpers.request(folder_url)
+            file_url = self.helpers.urljoin(str(dir_listing.url), href)
+            url = self.helpers.urlparse(file_url)
+            if url.path.endswith("/"):
+                response = await self.helpers.request(file_url)
                 if response.status_code == 200:
                     file_list.extend(await self.recursive_dir_list(response))
             else:
-                file_url = self.helpers.urljoin(str(dir_listing.url), href)
                 # Ensure the file is in the same domain as the directory listing
                 if file_url.startswith(str(dir_listing.url)):
                     url = self.helpers.urlparse(file_url)
                     file_list.append(url)
         return file_list
 
-    async def git_fuzz(self, repo_url):
-        file_list = []
-        # git_minimal_files = ["/.git/HEAD", "/.git/objects/", "/.git/refs/", "/.git/refs/heads/"]
+    async def git_fuzz(self, repo_url, folder):
+        containing_folder = self.tempdir / folder
+        self.helpers.mkdir(containing_folder)
         self.info(f"Directory listing not enabled, fuzzing {repo_url} for git files")
         for file in self.git_files:
             file_url = self.helpers.urljoin(repo_url, file)
-            url = self.helpers.urlparse(file_url)
+            git_index = file_url.path.find(".git")
             if file.endswith("/"):
-                file_list.append(url)
-            response = await self.helpers.request(file_url)
-            if response.status_code == 200:
-                file_list.append(url)
-        return file_list
+                self.helpers.mkdir(containing_folder / file_url.path[git_index:])
+            else:
+                filename = str(containing_folder / file_url.path[git_index:])
+                self.debug(f"Downloading {file_url} to {filename}")
+                await self.helpers.download(file_url, filename=filename)
+        if containing_folder.iterdir():
+            return containing_folder
+        else:
+            self.verbose(f"No files downloaded, removing temp directory {containing_folder}")
+            self.helpers.rm_rf(containing_folder)
+            return None
 
     async def download_files(self, urls, folder):
         containing_folder = self.tempdir / folder
         self.helpers.mkdir(containing_folder)
         self.verbose(f"Downloading the files to the temp directory {containing_folder}")
         for url in urls:
+            git_index = url.path.find(".git")
             if url.path.endswith("/"):
-                self.helpers.mkdir(containing_folder / url.path[1:])
+                self.helpers.mkdir(containing_folder / url.path[git_index:])
             else:
-                await self.helpers.download(url.geturl(), filename=str(containing_folder / url.path[1:]))
+                file_url = url.geturl()
+                filename = str(containing_folder / url.path[git_index:])
+                self.debug(f"Downloading {file_url} to {filename}")
+                await self.helpers.download(file_url, filename=filename)
         if containing_folder.iterdir():
-            self.debug(list(self.helpers.list_files(containing_folder / ".git")))
             return containing_folder
         else:
             self.verbose(f"No files downloaded, removing temp directory {containing_folder}")
