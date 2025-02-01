@@ -142,13 +142,15 @@ class githacker(BaseModule):
             href = link["href"]
             if href == "../" or href == "/":
                 continue
-            file_url = self.helpers.urljoin(str(dir_listing.url), href)
-            url = self.helpers.urlparse(file_url)
-            if url.path.endswith("/"):
-                response = await self.helpers.request(file_url)
+            if href.endswith("/"):
+                folder_url = self.helpers.urljoin(str(dir_listing.url), href)
+                url = self.helpers.urlparse(folder_url)
+                file_list.append(url)
+                response = await self.helpers.request(folder_url)
                 if response.status_code == 200:
                     file_list.extend(await self.recursive_dir_list(response))
             else:
+                file_url = self.helpers.urljoin(str(dir_listing.url), href)
                 # Ensure the file is in the same domain as the directory listing
                 if file_url.startswith(str(dir_listing.url)):
                     url = self.helpers.urlparse(file_url)
