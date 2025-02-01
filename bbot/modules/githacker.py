@@ -114,10 +114,10 @@ class githacker(BaseModule):
         repo_folder = self.helpers.tagify(repo_url)
         dir_listing = await self.directory_listing_enabled(repo_url)
         if dir_listing:
-            tmp_dir = await self.recursive_dir_list(dir_listing)
+            urls = await self.recursive_dir_list(dir_listing)
         else:
-            tmp_dir = await self.git_fuzz(repo_url, repo_folder)
-        # tmp_dir = await self.download_files(urls, repo_folder)
+            urls = await self.git_fuzz(repo_url)
+        tmp_dir = await self.download_files(urls, repo_folder)
         if tmp_dir:
             repo_path = await self.clone_git_repository(tmp_dir, repo_folder)
             if repo_path:
@@ -155,25 +155,18 @@ class githacker(BaseModule):
                     file_list.append(url)
         return file_list
 
-    async def git_fuzz(self, repo_url, folder):
-        containing_folder = self.tempdir / folder
-        self.helpers.mkdir(containing_folder)
+    async def git_fuzz(self, repo_url):
+        file_list = []
         self.info(f"Directory listing not enabled, fuzzing {repo_url} for git files")
         for file in self.git_files:
             file_url = self.helpers.urljoin(repo_url, file)
-            git_index = file_url.path.find(".git")
+            url = self.helpers.urlparse(file_url)
             if file.endswith("/"):
-                self.helpers.mkdir(containing_folder / file_url.path[git_index:])
-            else:
-                filename = str(containing_folder / file_url.path[git_index:])
-                self.debug(f"Downloading {file_url} to {filename}")
-                await self.helpers.download(file_url, filename=filename)
-        if containing_folder.iterdir():
-            return containing_folder
-        else:
-            self.verbose(f"No files downloaded, removing temp directory {containing_folder}")
-            self.helpers.rm_rf(containing_folder)
-            return None
+                file_list.append(url)
+            response = await self.helpers.request(file_url)
+            if response.status_code == 200:
+                file_list.append(url)
+        return file_list
 
     async def download_files(self, urls, folder):
         containing_folder = self.tempdir / folder
