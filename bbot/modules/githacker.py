@@ -1,3 +1,4 @@
+import regex as re
 from pathlib import Path
 from subprocess import CalledProcessError
 from bbot.modules.base import BaseModule
@@ -95,6 +96,23 @@ class githacker(BaseModule):
                     "refs/tags/1.0.0",
                 ]
             )
+        self.branch_names = [
+            "daily",
+            "dev",
+            "feature",
+            "feat",
+            "fix",
+            "hotfix",
+            "issue",
+            "main",
+            "master",
+            "ng",
+            "quickfix",
+            "release",
+            "test",
+            "testing",
+            "wip",
+        ]
         return await super().setup()
 
     async def filter_event(self, event):
@@ -158,17 +176,58 @@ class githacker(BaseModule):
         return file_list
 
     async def git_fuzz(self, repo_url):
+        url_list = []
+        self.debug("Adding basic git files to fuzz list")
+        url_list.extend(self.add_basic_files(repo_url))
+        self.debug("Adding common git branch names to fuzz list")
+        url_list.extend(await self.add_branch_names(repo_url))
+        return url_list
+
+    def add_basic_files(self, repo_url):
         file_list = []
-        self.info(f"Directory listing not enabled, fuzzing {repo_url} for git files")
         for file in self.git_files:
             file_url = self.helpers.urljoin(repo_url, file)
             url = self.helpers.urlparse(file_url)
-            if file.endswith("/"):
-                file_list.append(url)
-            response = await self.helpers.request(file_url)
-            if response.status_code == 200:
-                file_list.append(url)
+            file_list.append(url)
         return file_list
+
+    async def add_branch_names(self, repo_url):
+        url_list = []
+        branch_names = self.branch_names
+        self.debug("Adding the current banch name to the fuzz list")
+        branch_names.extend(await self.get_current_branch_name(repo_url))
+        self.debug("Adding logged branch names to the fuzz list")
+        branch_names.extend(await self.get_logged_branch_names(repo_url))
+        self.debug("Adding common branch names to the fuzz list")
+        url_patterns = [
+            "logs/refs/heads/{branch}",
+            "logs/refs/remotes/origin/{branch}",
+            "refs/remotes/origin/{branch}",
+            "refs/heads/{branch}",
+        ]
+        for branch in branch_names:
+            for pattern in url_patterns:
+                file_url = self.helpers.urljoin(repo_url, pattern.format(branch=branch))
+                url = self.helpers.urlparse(file_url)
+                url_list.append(url)
+        return url_list
+
+    async def get_current_branch_name(self, repo_url):
+        branch_names = []
+        head_url = self.helpers.urljoin(repo_url, "HEAD")
+        response = await self.helpers.request(head_url)
+        if response.status_code == 200:
+            branch_names = re.findall(r"ref: refs/heads/([a-zA-Z\d_-]+)", response.text)
+        return branch_names
+
+    async def get_logged_branch_names(self, repo_url):
+        branch_names = []
+        logs_url = self.helpers.urljoin(repo_url, "logs/HEAD")
+        response = await self.helpers.request(logs_url)
+        if response.status_code == 200:
+            branch_names_dups = re.findall(r"checkout: moving from ([a-zA-Z\d_-]+) to ([a-zA-Z\d_-]+)", response.text)
+            branch_names = list(set([i[0] for i in branch_names_dups] + [i[1] for i in branch_names_dups]))
+        return branch_names
 
     async def download_files(self, urls, folder):
         containing_folder = self.tempdir / folder
